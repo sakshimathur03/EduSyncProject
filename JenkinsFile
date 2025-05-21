@@ -5,19 +5,19 @@ pipeline {
     AZURE_RESOURCE_GROUP = 'rg-finalproject3425'
     BACKEND_APP_NAME     = 'edusync-backend-api1'
     FRONTEND_APP_NAME    = 'edusync-frontend03'
-    DOTNET_VERSION       = '8.0.x'
+    DOTNET_VERSION       = '8.0.x'   // for your reference, not used in tools block now
     NODE_VERSION         = '18.x'
   }
 
   tools {
     nodejs "${NODE_VERSION}"
-    dotnet "${DOTNET_VERSION}"
+    // dotnet "${DOTNET_VERSION}"  // Removed because Jenkins does not support dotnet here by default
   }
 
   stages {
     stage('Checkout Code') {
       steps {
-        git ' https://github.com/sakshimathur03/EduSyncProject.git'
+        git 'https://github.com/sakshimathur03/EduSyncProject.git'
       }
     }
 
