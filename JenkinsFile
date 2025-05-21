@@ -24,16 +24,14 @@ pipeline {
       steps {
         dir('terraform') {
           withCredentials([file(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_CREDS')]) {
-            bat 'for /f "delims=" %i in (\"%AZURE_CREDS%\") do set AZURE_CONTENT=%i'
-            bat 'powershell -Command "Get-Content %AZURE_CREDS% | Out-String | Write-Output"'
-            // We need to extract JSON fields in Windows batch, easier with PowerShell:
-            bat '''
-              powershell -Command "$json = Get-Content %AZURE_CREDS% | ConvertFrom-Json; \
-              [Environment]::SetEnvironmentVariable('ARM_CLIENT_ID', $json.clientId); \
-              [Environment]::SetEnvironmentVariable('ARM_CLIENT_SECRET', $json.clientSecret); \
-              [Environment]::SetEnvironmentVariable('ARM_SUBSCRIPTION_ID', $json.subscriptionId); \
-              [Environment]::SetEnvironmentVariable('ARM_TENANT_ID', $json.tenantId)"
-            '''
+            bat """
+              powershell -Command "\
+                \$json = Get-Content '${AZURE_CREDS}' | ConvertFrom-Json; \
+                [Environment]::SetEnvironmentVariable('ARM_CLIENT_ID', \$json.clientId, 'Process'); \
+                [Environment]::SetEnvironmentVariable('ARM_CLIENT_SECRET', \$json.clientSecret, 'Process'); \
+                [Environment]::SetEnvironmentVariable('ARM_SUBSCRIPTION_ID', \$json.subscriptionId, 'Process'); \
+                [Environment]::SetEnvironmentVariable('ARM_TENANT_ID', \$json.tenantId, 'Process')"
+            """
             bat 'terraform init'
             bat 'terraform plan -out=tfplan'
             bat 'terraform apply -auto-approve tfplan'
@@ -63,16 +61,13 @@ pipeline {
     stage('Deploy Backend to Azure') {
       steps {
         withCredentials([file(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_CREDS')]) {
-          bat '''
-            powershell -Command "$json = Get-Content %AZURE_CREDS% | ConvertFrom-Json; \
-            $env:CLIENT_ID = $json.clientId; \
-            $env:CLIENT_SECRET = $json.clientSecret; \
-            $env:TENANT_ID = $json.tenantId; \
-            $env:SUBSCRIPTION_ID = $json.subscriptionId; \
-            az login --service-principal -u $env:CLIENT_ID -p $env:CLIENT_SECRET --tenant $env:TENANT_ID; \
-            az account set --subscription $env:SUBSCRIPTION_ID; \
-            az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${BACKEND_APP_NAME} --src-path backend\\backend_publish.zip --type zip"
-          '''
+          bat """
+            powershell -Command "\
+              \$json = Get-Content '${AZURE_CREDS}' | ConvertFrom-Json; \
+              az login --service-principal -u \$json.clientId -p \$json.clientSecret --tenant \$json.tenantId; \
+              az account set --subscription \$json.subscriptionId; \
+              az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${BACKEND_APP_NAME} --src-path backend\\backend_publish.zip --type zip"
+          """
         }
       }
     }
@@ -97,16 +92,13 @@ pipeline {
     stage('Deploy Frontend to Azure') {
       steps {
         withCredentials([file(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_CREDS')]) {
-          bat '''
-            powershell -Command "$json = Get-Content %AZURE_CREDS% | ConvertFrom-Json; \
-            $env:CLIENT_ID = $json.clientId; \
-            $env:CLIENT_SECRET = $json.clientSecret; \
-            $env:TENANT_ID = $json.tenantId; \
-            $env:SUBSCRIPTION_ID = $json.subscriptionId; \
-            az login --service-principal -u $env:CLIENT_ID -p $env:CLIENT_SECRET --tenant $env:TENANT_ID; \
-            az account set --subscription $env:SUBSCRIPTION_ID; \
-            az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${FRONTEND_APP_NAME} --src-path frontend\\frontend_build.zip --type zip"
-          '''
+          bat """
+            powershell -Command "\
+              \$json = Get-Content '${AZURE_CREDS}' | ConvertFrom-Json; \
+              az login --service-principal -u \$json.clientId -p \$json.clientSecret --tenant \$json.tenantId; \
+              az account set --subscription \$json.subscriptionId; \
+              az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${FRONTEND_APP_NAME} --src-path frontend\\frontend_build.zip --type zip"
+          """
         }
       }
     }
