@@ -2,6 +2,7 @@ pipeline {
   agent any
 
   environment {
+     AZURE_CREDENTIALS_ID = 'Azure-principle'
     AZURE_RESOURCE_GROUP = 'rg-finalproject3425'
     BACKEND_APP_NAME     = 'edusync-backend-api1'
     FRONTEND_APP_NAME    = 'edusync-frontend03'
