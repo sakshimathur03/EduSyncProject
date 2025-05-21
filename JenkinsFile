@@ -5,23 +5,22 @@ pipeline {
     AZURE_RESOURCE_GROUP = 'rg-finalproject3425'
     BACKEND_APP_NAME     = 'edusync-backend-api1'
     FRONTEND_APP_NAME    = 'edusync-frontend03'
-    DOTNET_VERSION       = '8.0.x'   // for your reference, not used in tools block now
     NODE_VERSION         = '18.x'
   }
 
   tools {
     nodejs "${NODE_VERSION}"
-    // dotnet "${DOTNET_VERSION}"  // Removed because Jenkins does not support dotnet here by default
   }
 
   stages {
     stage('Checkout Code') {
       steps {
-        git 'https://github.com/sakshimathur03/EduSyncProject.git'
+        // Checkout the full repo assuming it contains backend, frontend, terraform folders
+        git url: 'https://github.com/sakshimathur03/EduSyncProject.git', branch: 'main'
       }
     }
 
-    stage('Terraform Init & Apply') {
+    stage('Terraform Init, Plan & Apply') {
       steps {
         dir('terraform') {
           withCredentials([file(credentialsId: 'azure-credentials-json', variable: 'AZURE_CREDS')]) {
@@ -30,15 +29,17 @@ pipeline {
               export ARM_CLIENT_SECRET=$(jq -r .clientSecret $AZURE_CREDS)
               export ARM_SUBSCRIPTION_ID=$(jq -r .subscriptionId $AZURE_CREDS)
               export ARM_TENANT_ID=$(jq -r .tenantId $AZURE_CREDS)
+
               terraform init
-              terraform apply -auto-approve
+              terraform plan -out=tfplan
+              terraform apply -auto-approve tfplan
             '''
           }
         }
       }
     }
 
-    stage('Build Backend') {
+    stage('Build Backend (.NET)') {
       steps {
         dir('backend') {
           sh 'dotnet restore'
@@ -48,18 +49,33 @@ pipeline {
       }
     }
 
+    stage('Package Backend Artifact') {
+      steps {
+        dir('backend') {
+          sh 'zip -r backend_publish.zip publish'
+        }
+      }
+    }
+
     stage('Deploy Backend to Azure') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'azure-service-principal', usernameVariable: 'AZURE_USERNAME', passwordVariable: 'AZURE_PASSWORD')]) {
+        withCredentials([file(credentialsId: 'azure-credentials-json', variable: 'AZURE_CREDS')]) {
           sh '''
-            az login --service-principal -u $AZURE_USERNAME -p $AZURE_PASSWORD --tenant <your-tenant-id>
-            az webapp deploy --resource-group $AZURE_RESOURCE_GROUP --name $BACKEND_APP_NAME --src-path backend/publish
+            CLIENT_ID=$(jq -r .clientId $AZURE_CREDS)
+            CLIENT_SECRET=$(jq -r .clientSecret $AZURE_CREDS)
+            TENANT_ID=$(jq -r .tenantId $AZURE_CREDS)
+            SUBSCRIPTION_ID=$(jq -r .subscriptionId $AZURE_CREDS)
+
+            az login --service-principal -u $CLIENT_ID -p $CLIENT_SECRET --tenant $TENANT_ID
+            az account set --subscription $SUBSCRIPTION_ID
+
+            az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${BACKEND_APP_NAME} --src-path backend/backend_publish.zip --type zip
           '''
         }
       }
     }
 
-    stage('Build Frontend') {
+    stage('Build Frontend (React)') {
       steps {
         dir('frontend') {
           sh 'npm install'
@@ -68,20 +84,44 @@ pipeline {
       }
     }
 
+    stage('Package Frontend Artifact') {
+      steps {
+        dir('frontend') {
+          sh 'zip -r frontend_build.zip build'
+        }
+      }
+    }
+
     stage('Deploy Frontend to Azure') {
       steps {
-        sh '''
-          az webapp deploy --resource-group $AZURE_RESOURCE_GROUP --name $FRONTEND_APP_NAME --src-path frontend/build
-        '''
+        withCredentials([file(credentialsId: 'azure-credentials-json', variable: 'AZURE_CREDS')]) {
+          sh '''
+            CLIENT_ID=$(jq -r .clientId $AZURE_CREDS)
+            CLIENT_SECRET=$(jq -r .clientSecret $AZURE_CREDS)
+            TENANT_ID=$(jq -r .tenantId $AZURE_CREDS)
+            SUBSCRIPTION_ID=$(jq -r .subscriptionId $AZURE_CREDS)
+
+            az login --service-principal -u $CLIENT_ID -p $CLIENT_SECRET --tenant $TENANT_ID
+            az account set --subscription $SUBSCRIPTION_ID
+
+            az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${FRONTEND_APP_NAME} --src-path frontend/frontend_build.zip --type zip
+          '''
+        }
       }
     }
   }
 
   post {
+    success {
+      echo 'Deployment completed successfully!'
+      mail to: 'you@example.com',
+           subject: "SUCCESS: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+           body: "Good news! Build completed successfully. See details at: ${env.BUILD_URL}"
+    }
     failure {
       mail to: 'you@example.com',
-           subject: "Build failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-           body: "Check Jenkins for details: ${env.BUILD_URL}"
+           subject: "FAILED: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+           body: "Build failed. Check console output at: ${env.BUILD_URL}"
     }
   }
 }
