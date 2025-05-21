@@ -1,0 +1,87 @@
+pipeline {
+  agent any
+
+  environment {
+    AZURE_RESOURCE_GROUP = 'rg-finalproject3425'
+    BACKEND_APP_NAME     = 'edusync-backend-api1'
+    FRONTEND_APP_NAME    = 'edusync-frontend03'
+    DOTNET_VERSION       = '8.0.x'
+    NODE_VERSION         = '18.x'
+  }
+
+  tools {
+    nodejs "${NODE_VERSION}"
+    dotnet "${DOTNET_VERSION}"
+  }
+
+  stages {
+    stage('Checkout Code') {
+      steps {
+        git ' https://github.com/sakshimathur03/EduSyncProject.git'
+      }
+    }
+
+    stage('Terraform Init & Apply') {
+      steps {
+        dir('terraform') {
+          withCredentials([file(credentialsId: 'azure-credentials-json', variable: 'AZURE_CREDS')]) {
+            sh '''
+              export ARM_CLIENT_ID=$(jq -r .clientId $AZURE_CREDS)
+              export ARM_CLIENT_SECRET=$(jq -r .clientSecret $AZURE_CREDS)
+              export ARM_SUBSCRIPTION_ID=$(jq -r .subscriptionId $AZURE_CREDS)
+              export ARM_TENANT_ID=$(jq -r .tenantId $AZURE_CREDS)
+              terraform init
+              terraform apply -auto-approve
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Build Backend') {
+      steps {
+        dir('backend') {
+          sh 'dotnet restore'
+          sh 'dotnet build --configuration Release'
+          sh 'dotnet publish --configuration Release -o publish'
+        }
+      }
+    }
+
+    stage('Deploy Backend to Azure') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'azure-service-principal', usernameVariable: 'AZURE_USERNAME', passwordVariable: 'AZURE_PASSWORD')]) {
+          sh '''
+            az login --service-principal -u $AZURE_USERNAME -p $AZURE_PASSWORD --tenant <your-tenant-id>
+            az webapp deploy --resource-group $AZURE_RESOURCE_GROUP --name $BACKEND_APP_NAME --src-path backend/publish
+          '''
+        }
+      }
+    }
+
+    stage('Build Frontend') {
+      steps {
+        dir('frontend') {
+          sh 'npm install'
+          sh 'npm run build'
+        }
+      }
+    }
+
+    stage('Deploy Frontend to Azure') {
+      steps {
+        sh '''
+          az webapp deploy --resource-group $AZURE_RESOURCE_GROUP --name $FRONTEND_APP_NAME --src-path frontend/build
+        '''
+      }
+    }
+  }
+
+  post {
+    failure {
+      mail to: 'you@example.com',
+           subject: "Build failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+           body: "Check Jenkins for details: ${env.BUILD_URL}"
+    }
+  }
+}
