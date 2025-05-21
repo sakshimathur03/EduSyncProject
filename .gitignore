@@ -1,0 +1,16 @@
+# Ignore frontend build and dependencies
+Frontend/node_modules/
+Frontend/build/
+
+# Ignore .NET build artifacts
+Backend/bin/
+Backend/obj/
+Backend/publish/
+
+# Ignore Terraform state files
+Terraform/.terraform/
+Terraform/*.tfstate
+Terraform/*.tfstate.backup
+
+# General
+*.env
