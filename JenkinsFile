@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   environment {
-    AZURE_CREDENTIALS_ID = 'Azure-principle'
+    AZURE_CREDENTIALS_ID = 'Azure-principle'  // this must be Secret Text (JSON content)
     AZURE_RESOURCE_GROUP = 'rg-finalproject3425'
     BACKEND_APP_NAME     = 'edusync-backend-api1'
     FRONTEND_APP_NAME    = 'edusync-frontend03'
@@ -23,10 +23,10 @@ pipeline {
     stage('Terraform Init, Plan & Apply') {
       steps {
         dir('terraform') {
-          withCredentials([file(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_CREDS')]) {
+          withCredentials([string(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_SECRET_JSON')]) {
             bat """
               powershell -Command "\
-                \$json = Get-Content '${AZURE_CREDS}' | ConvertFrom-Json; \
+                \$json = ConvertFrom-Json -InputObject \$env:AZURE_SECRET_JSON; \
                 [Environment]::SetEnvironmentVariable('ARM_CLIENT_ID', \$json.clientId, 'Process'); \
                 [Environment]::SetEnvironmentVariable('ARM_CLIENT_SECRET', \$json.clientSecret, 'Process'); \
                 [Environment]::SetEnvironmentVariable('ARM_SUBSCRIPTION_ID', \$json.subscriptionId, 'Process'); \
@@ -60,10 +60,10 @@ pipeline {
 
     stage('Deploy Backend to Azure') {
       steps {
-        withCredentials([file(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_CREDS')]) {
+        withCredentials([string(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_SECRET_JSON')]) {
           bat """
             powershell -Command "\
-              \$json = Get-Content '${AZURE_CREDS}' | ConvertFrom-Json; \
+              \$json = ConvertFrom-Json -InputObject \$env:AZURE_SECRET_JSON; \
               az login --service-principal -u \$json.clientId -p \$json.clientSecret --tenant \$json.tenantId; \
               az account set --subscription \$json.subscriptionId; \
               az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${BACKEND_APP_NAME} --src-path backend\\backend_publish.zip --type zip"
@@ -91,10 +91,10 @@ pipeline {
 
     stage('Deploy Frontend to Azure') {
       steps {
-        withCredentials([file(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_CREDS')]) {
+        withCredentials([string(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_SECRET_JSON')]) {
           bat """
             powershell -Command "\
-              \$json = Get-Content '${AZURE_CREDS}' | ConvertFrom-Json; \
+              \$json = ConvertFrom-Json -InputObject \$env:AZURE_SECRET_JSON; \
               az login --service-principal -u \$json.clientId -p \$json.clientSecret --tenant \$json.tenantId; \
               az account set --subscription \$json.subscriptionId; \
               az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${FRONTEND_APP_NAME} --src-path frontend\\frontend_build.zip --type zip"
