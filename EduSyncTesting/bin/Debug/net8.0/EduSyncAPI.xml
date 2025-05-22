@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>EduSyncAPI</name>
+    </assembly>
+    <members>
+        <member name="M:EduSyncAPI.Controllers.MediaController.Upload(EduSyncAPI.Controllers.MediaController.FileUploadModel)">
+            <summary>
+            Uploads a media file to blob storage.
+            </summary>
+        </member>
+        <member name="T:EduSyncAPI.Migrations.InitialCreate">
+            <inheritdoc />
+        </member>
+        <member name="M:EduSyncAPI.Migrations.InitialCreate.Up(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:EduSyncAPI.Migrations.InitialCreate.Down(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:EduSyncAPI.Migrations.InitialCreate.BuildTargetModel(Microsoft.EntityFrameworkCore.ModelBuilder)">
+            <inheritdoc />
+        </member>
+    </members>
+</doc>
