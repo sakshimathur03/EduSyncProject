@@ -1,0 +1,115 @@
+pipeline {
+  agent any
+
+  environment {
+    AZURE_CREDENTIALS_ID = 'Azure-principle'  // this must be Secret Text (JSON content)
+    AZURE_RESOURCE_GROUP = 'rg-finalproject3425'
+    BACKEND_APP_NAME     = 'edusync-backend-api1'
+    FRONTEND_APP_NAME    = 'edusync-frontend03'
+    NODE_VERSION         = '18.x'
+  }
+
+  tools {
+    nodejs "${NODE_VERSION}"
+  }
+
+  stages {
+    stage('Checkout Code') {
+      steps {
+        git url: 'https://github.com/sakshimathur03/EduSyncProject.git', branch: 'main'
+      }
+    }
+
+    stage('Terraform Init, Plan & Apply') {
+      steps {
+        dir('terraform') {
+          withCredentials([string(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_SECRET_JSON')]) {
+            bat """
+              powershell -Command "\
+                \$json = ConvertFrom-Json -InputObject \$env:AZURE_SECRET_JSON; \
+                [Environment]::SetEnvironmentVariable('ARM_CLIENT_ID', \$json.clientId, 'Process'); \
+                [Environment]::SetEnvironmentVariable('ARM_CLIENT_SECRET', \$json.clientSecret, 'Process'); \
+                [Environment]::SetEnvironmentVariable('ARM_SUBSCRIPTION_ID', \$json.subscriptionId, 'Process'); \
+                [Environment]::SetEnvironmentVariable('ARM_TENANT_ID', \$json.tenantId, 'Process')"
+            """
+            bat 'terraform init'
+            bat 'terraform plan -out=tfplan'
+            bat 'terraform apply -auto-approve tfplan'
+          }
+        }
+      }
+    }
+
+    stage('Build Backend (.NET)') {
+      steps {
+        dir('backend') {
+          bat 'dotnet restore'
+          bat 'dotnet build --configuration Release'
+          bat 'dotnet publish --configuration Release -o publish'
+        }
+      }
+    }
+
+    stage('Package Backend Artifact') {
+      steps {
+        dir('backend') {
+          bat 'powershell -Command "Compress-Archive -Path publish\\* -DestinationPath backend_publish.zip -Force"'
+        }
+      }
+    }
+
+    stage('Deploy Backend to Azure') {
+      steps {
+        withCredentials([string(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_SECRET_JSON')]) {
+          bat """
+            powershell -Command "\
+              \$json = ConvertFrom-Json -InputObject \$env:AZURE_SECRET_JSON; \
+              az login --service-principal -u \$json.clientId -p \$json.clientSecret --tenant \$json.tenantId; \
+              az account set --subscription \$json.subscriptionId; \
+              az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${BACKEND_APP_NAME} --src-path backend\\backend_publish.zip --type zip"
+          """
+        }
+      }
+    }
+
+    stage('Build Frontend (React)') {
+      steps {
+        dir('frontend') {
+          bat 'npm install'
+          bat 'npm run build'
+        }
+      }
+    }
+
+    stage('Package Frontend Artifact') {
+      steps {
+        dir('frontend') {
+          bat 'powershell -Command "Compress-Archive -Path build\\* -DestinationPath frontend_build.zip -Force"'
+        }
+      }
+    }
+
+    stage('Deploy Frontend to Azure') {
+      steps {
+        withCredentials([string(credentialsId: "${AZURE_CREDENTIALS_ID}", variable: 'AZURE_SECRET_JSON')]) {
+          bat """
+            powershell -Command "\
+              \$json = ConvertFrom-Json -InputObject \$env:AZURE_SECRET_JSON; \
+              az login --service-principal -u \$json.clientId -p \$json.clientSecret --tenant \$json.tenantId; \
+              az account set --subscription \$json.subscriptionId; \
+              az webapp deploy --resource-group ${AZURE_RESOURCE_GROUP} --name ${FRONTEND_APP_NAME} --src-path frontend\\frontend_build.zip --type zip"
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo 'Deployment completed successfully!'
+    }
+    failure {
+      echo 'Deployment failed!'
+    }
+  }
+}
